@@ -1,0 +1,25 @@
+{
+  "name": "ドキュメントスキャナー",
+  "short_name": "スキャナー",
+  "description": "書類をスキャンしてPNG/JPEGで保存。オフライン対応。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0ede8",
+  "theme_color": "#2563a8",
+  "orientation": "portrait",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
