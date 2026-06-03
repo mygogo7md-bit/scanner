@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ドキュメントスキャナー</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2563a8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="スキャナー">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+:root{--bg:#f0ede8;--sf:#faf8f5;--sf2:#e8e4de;--bd:#d8d4cc;--tx:#1a1814;--tx2:#6b6560;--tx3:#a09990;--ac:#2563a8;--ac2:#1a4a80;--ok:#2d6a2d;--r:12px;--rs:8px}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;padding-bottom:40px}
+header{background:var(--sf);border-bottom:1px solid var(--bd);padding:13px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100}
+header svg{width:26px;height:26px;color:var(--ac)}
+header h1{font-size:16px;font-weight:700}
+header small{font-size:11px;color:var(--tx3);margin-left:auto}
+.steps{display:flex;background:var(--sf);border-bottom:1px solid var(--bd);padding:0 16px}
+.stt{flex:1;padding:9px 4px;text-align:center;font-size:12px;font-weight:500;color:var(--tx3);border-bottom:2.5px solid transparent;white-space:nowrap}
+.stt.active{color:var(--ac);border-bottom-color:var(--ac)}
+.stt.done{color:var(--ok)}
+.stt .n{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:var(--tx3);color:#fff;font-size:10px;margin-right:3px}
+.stt.active .n{background:var(--ac)}
+.stt.done .n{background:var(--ok)}
+.wrap{padding:14px;max-width:700px;margin:0 auto}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.ct{font-size:12px;font-weight:700;color:var(--tx2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:6px}
+.ct svg{width:15px;height:15px}
+.two{display:flex;gap:10px;margin-bottom:12px}
+.two>div{flex:1;border-radius:var(--r);padding:24px 10px;text-align:center;cursor:pointer;transition:background .15s}
+.two>div:active{background:var(--sf2)!important}
+.two>div svg{width:40px;height:40px;display:block;margin:0 auto 8px}
+
+/* ── ライブカメラ全画面 ── */
+#camScr{position:fixed;inset:0;z-index:500;background:#000;display:flex;flex-direction:column}
+#camScr.hidden{display:none!important}
+#camVid{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
+#camCv{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+#camTop{position:absolute;top:0;left:0;right:0;z-index:10;padding:14px 16px;background:linear-gradient(rgba(0,0,0,.6),transparent);display:flex;justify-content:space-between;align-items:center}
+#camTop span{color:#fff;font-size:13px;font-weight:700}
+#camCancel{color:#fff;background:rgba(255,255,255,.18);border:none;border-radius:20px;padding:6px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+#camBot{position:absolute;bottom:0;left:0;right:0;z-index:10;padding:28px 16px;background:linear-gradient(transparent,rgba(0,0,0,.65));display:flex;justify-content:center;align-items:center;gap:20px}
+#camRatio{background:rgba(0,0,0,.45);color:#fff;border:1.5px solid rgba(255,255,255,.4);border-radius:20px;padding:7px 16px;font-size:13px;font-weight:700;font-family:inherit;-webkit-appearance:none;appearance:none;cursor:pointer}
+#camRatio option{background:#222}
+#shutBtn{width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.4);box-shadow:0 0 0 3px rgba(255,255,255,.25);cursor:pointer;transition:transform .1s;flex-shrink:0}
+#shutBtn:active{transform:scale(.9)}
+#camFlash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:20;transition:opacity .06s}
+
+/* ── Step2 canvas ── */
+#cvWrap{position:relative;display:block;line-height:0;border-radius:var(--rs)}
+#srcC{display:block;width:100%;height:auto;border-radius:var(--rs);background:#111}
+#ovC{position:absolute;top:0;left:0;border-radius:var(--rs);touch-action:none;cursor:crosshair}
+
+.hint{font-size:12px;color:var(--tx3);margin-top:8px;line-height:1.6;padding:8px 10px;background:var(--sf2);border-radius:var(--rs)}
+.field{margin-bottom:10px}
+.field label{display:block;font-size:12px;font-weight:700;color:var(--tx2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em}
+select{width:100%;padding:9px 32px 9px 10px;border:1px solid var(--bd);border-radius:var(--rs);font-size:14px;font-family:inherit;color:var(--tx);background:var(--sf) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b6560' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;-webkit-appearance:none;appearance:none}
+.sf{margin-bottom:10px}
+.sl{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.sl span:first-child{font-size:12px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.05em}
+.sl span:last-child{font-size:14px;font-weight:700;color:var(--ac);min-width:40px;text-align:right}
+input[type=range]{width:100%;height:4px;-webkit-appearance:none;appearance:none;background:var(--bd);border-radius:2px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--ac);cursor:pointer;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.brow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.btn{padding:12px 18px;border-radius:var(--rs);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:6px;border:none;transition:all .15s}
+.btn svg{width:17px;height:17px;flex-shrink:0}
+.btn-p{background:var(--ac);color:#fff;flex:1;justify-content:center}
+.btn-p:active{background:var(--ac2);transform:scale(.98)}
+.btn-o{background:var(--sf);color:var(--tx);border:1px solid var(--bd)}
+.btn-o:active{background:var(--sf2)}
+.btn-g{background:var(--ok);color:#fff;flex:1;justify-content:center}
+.btn-b{background:#1a4a80;color:#fff;flex:1;justify-content:center}
+#resC{display:block;width:100%;height:auto;border-radius:var(--rs)}
+.hidden{display:none!important}
+#proc{display:none;position:fixed;inset:0;z-index:999;background:rgba(240,237,232,.93);align-items:center;justify-content:center;flex-direction:column;gap:14px}
+#proc.vis{display:flex}
+.spin{width:42px;height:42px;border:4px solid var(--bd);border-top-color:var(--ac);border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#proc p{font-size:15px;font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- ══ ライブカメラ画面 ══ -->
+<div id="camScr" class="hidden">
+  <video id="camVid" autoplay playsinline muted></video>
+  <canvas id="camCv"></canvas>
+
+  <div id="camTop">
+    <span>📄 枠に書類を合わせて撮影</span>
+    <button id="camCancel" onclick="camClose()">✕ キャンセル</button>
+  </div>
+
+  <div id="camBot">
+    <select id="camRatio" onchange="camDraw()">
+      <option value="1.6481">リーガル 216×356mm</option>
+      <option value="1.4142" selected>A4 210×297mm</option>
+      <option value="1.2941">レター 216×279mm</option>
+    </select>
+    <button id="shutBtn" onclick="camShoot()"></button>
+  </div>
+
+  <div id="camFlash"></div>
+</div>
+
+<!-- ══ メイン ══ -->
+<header>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10M7 12h6M7 16h4"/></svg>
+  <h1>ドキュメントスキャナー</h1>
+  <small>無料・オフライン対応</small>
+</header>
+
+<div class="steps">
+  <div class="stt active" id="s1"><span class="n">1</span>写真を選ぶ</div>
+  <div class="stt" id="s2"><span class="n">2</span>角を合わせる</div>
+  <div class="stt" id="s3"><span class="n">3</span>補正・保存</div>
+</div>
+
+<div class="wrap">
+
+<!-- STEP 1 -->
+<div id="p1">
+  <div style="height:14px"></div>
+  <div class="two">
+    <div style="border:2px solid var(--ac);background:var(--sf)" onclick="camOpen()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <p style="font-size:14px;font-weight:700;color:var(--ac);margin-bottom:3px">カメラで撮影</p>
+      <p style="font-size:11px;color:var(--tx3)">枠ガイドつき</p>
+    </div>
+    <div style="border:1px solid var(--bd);background:var(--sf)" onclick="document.getElementById('fgal').click()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--tx2)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      <p style="font-size:14px;font-weight:700;margin-bottom:3px">ギャラリー</p>
+      <p style="font-size:11px;color:var(--tx3)">保存済みの写真</p>
+    </div>
+  </div>
+  <input type="file" id="fgal" accept="image/*" style="display:none" onchange="galLoad(event)">
+
+  <div class="card">
+    <div class="ct">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>使い方
+    </div>
+    <div style="font-size:14px;line-height:2.1;color:var(--tx2)">
+      ① カメラボタン → 白い枠に書類を合わせて撮影<br>
+      ② 撮影後、4隅の赤●を微調整<br>
+      ③ フィルターを選んで「補正を適用」<br>
+      ④ PNG または JPEG で保存<br><br>
+      <strong style="color:var(--tx)">320mm（リーガル）対応。WiFi不要・オフライン動作。</strong>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 2 -->
+<div id="p2" class="hidden">
+  <div class="card">
+    <div class="ct">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3L15 9M3 21l6-6M21 21l-6-6M3 3l6 6"/></svg>
+      赤い●を書類の4隅に合わせてください
+    </div>
+    <div id="cvWrap">
+      <canvas id="srcC"></canvas>
+      <canvas id="ovC"></canvas>
+    </div>
+    <p class="hint">赤い●をドラッグして書類の角に合わせてください。</p>
+  </div>
+
+  <div class="card">
+    <div class="ct">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>出力設定
+    </div>
+    <div class="field">
+      <label>用紙の比率</label>
+      <select id="ratio">
+        <option value="legal">リーガル 216×356mm</option>
+        <option value="a4" selected>A4 210×297mm</option>
+        <option value="letter">レター 216×279mm</option>
+        <option value="free">フリー（そのまま）</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>フィルター</label>
+      <select id="filt">
+        <option value="none">カラーそのまま</option>
+        <option value="gray" selected>グレースケール（標準）</option>
+        <option value="gray_lite">グレースケール・背景薄め ★おすすめ</option>
+        <option value="gray_white">グレースケール・背景ほぼ白</option>
+        <option value="bw">白黒（コントラスト強）</option>
+      </select>
+    </div>
+    <div class="sf">
+      <div class="sl"><span>明るさ</span><span id="bv">+15</span></div>
+      <input type="range" id="bright" min="-80" max="80" value="15" oninput="document.getElementById('bv').textContent=(+this.value>=0?'+':'')+this.value">
+    </div>
+    <div class="sf">
+      <div class="sl"><span>コントラスト</span><span id="cv">+20</span></div>
+      <input type="range" id="cont" min="-50" max="100" value="20" oninput="document.getElementById('cv').textContent=(+this.value>=0?'+':'')+this.value">
+    </div>
+  </div>
+
+  <div class="brow">
+    <button class="btn btn-p" onclick="doApply()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>補正を適用
+    </button>
+    <button class="btn btn-o" onclick="doReset()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>別の写真
+    </button>
+  </div>
+</div>
+
+<!-- STEP 3 -->
+<div id="p3" class="hidden">
+  <div class="card">
+    <div class="ct">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>補正完了
+    </div>
+    <canvas id="resC"></canvas>
+  </div>
+  <div class="brow">
+    <button class="btn btn-g" id="btnPng" onclick="dl('png')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>PNG 保存
+    </button>
+    <button class="btn btn-b" id="btnJpg" onclick="dl('jpg')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>JPEG 保存
+    </button>
+  </div>
+  <div class="brow">
+    <button class="btn btn-o" onclick="goPage(2)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>調整に戻る
+    </button>
+    <button class="btn btn-o" onclick="doReset()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>別の写真
+    </button>
+  </div>
+</div>
+
+</div>
+<div id="proc"><div class="spin"></div><p>補正処理中...</p></div>
+
+<script>
+// ══ globals ══
+var IMG=null, SC=1, CW=0, CH=0, PTS=[], DRAG=-1;
+var camStream=null;
+// カメラ撮影時のガイド枠（video座標）
+var camGuide=null; // {x1,y1,x2,y2} in video pixels
+
+// ══ page ══
+function goPage(n){
+  ['p1','p2','p3'].forEach(function(id,i){
+    document.getElementById(id).classList.toggle('hidden',i+1!==n);
+  });
+  ['s1','s2','s3'].forEach(function(id,i){
+    var e=document.getElementById(id);
+    e.className='stt'+(i+1<n?' done':i+1===n?' active':'');
+  });
+}
+
+// ══ カメラ起動 ══
+function camOpen(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    // フォールバック
+    var inp=document.createElement('input');
+    inp.type='file';inp.accept='image/*';inp.capture='environment';inp.style.display='none';
+    inp.onchange=function(e){galLoad(e);document.body.removeChild(inp);};
+    document.body.appendChild(inp);inp.click();return;
+  }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},audio:false})
+  .then(function(stream){
+    camStream=stream;
+    var v=document.getElementById('camVid');
+    v.srcObject=stream;
+    v.play();
+    document.getElementById('camScr').classList.remove('hidden');
+    // videoメタデータ読み込み後にガイド描画
+    v.addEventListener('loadedmetadata',camDraw,{once:true});
+    // すでに再生中の場合
+    if(v.readyState>=1) camDraw();
+  })
+  .catch(function(){
+    // 権限なし→フォールバック
+    var inp=document.createElement('input');
+    inp.type='file';inp.accept='image/*';inp.capture='environment';inp.style.display='none';
+    inp.onchange=function(e){galLoad(e);document.body.removeChild(inp);};
+    document.body.appendChild(inp);inp.click();
+  });
+}
+
+// ══ カメラガイド描画 ══
+function camDraw(){
+  var cv=document.getElementById('camCv');
+  var sw=window.innerWidth, sh=window.innerHeight;
+  cv.width=sw; cv.height=sh;
+  cv.style.width=sw+'px'; cv.style.height=sh+'px';
+
+  var ratio=parseFloat(document.getElementById('camRatio').value);
+  var margin=0.08;
+  var gw=sw*(1-margin*2);
+  var gh=gw*ratio;
+  if(gh>sh*0.70){gh=sh*0.70;gw=gh/ratio;}
+  var gx=(sw-gw)/2;
+  var gy=(sh-gh)/2-sh*0.04;
+
+  // video→screen の変換係数を保存（撮影時に使う）
+  var vid=document.getElementById('camVid');
+  var vW=vid.videoWidth||1920, vH=vid.videoHeight||1080;
+  var vAsp=vW/vH, sAsp=sw/sh;
+  var vSc, vOx, vOy;
+  if(vAsp>sAsp){vSc=sh/vH;vOx=(sw-vW*vSc)/2;vOy=0;}
+  else{vSc=sw/vW;vOx=0;vOy=(sh-vH*vSc)/2;}
+  // ガイド枠をvideo座標に変換して保存
+  camGuide={
+    x1:(gx-vOx)/vSc, y1:(gy-vOy)/vSc,
+    x2:(gx+gw-vOx)/vSc, y2:(gy+gh-vOy)/vSc
+  };
+
+  var ctx=cv.getContext('2d');
+  ctx.clearRect(0,0,sw,sh);
+
+  // 枠外を暗く
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  ctx.fillRect(0,0,sw,sh);
+  // 枠内を透明にくり抜き
+  ctx.clearRect(gx,gy,gw,gh);
+
+  // 枠線
+  ctx.strokeStyle='rgba(255,255,255,0.95)';
+  ctx.lineWidth=2.5;
+  ctx.strokeRect(gx,gy,gw,gh);
+
+  // 四隅マーク
+  var cs=Math.min(28,gw*0.12);
+  ctx.strokeStyle='#fff';
+  ctx.lineWidth=4;
+  [[gx,gy,1,1],[gx+gw,gy,-1,1],[gx,gy+gh,1,-1],[gx+gw,gy+gh,-1,-1]].forEach(function(c){
+    ctx.beginPath();
+    ctx.moveTo(c[0]+cs*c[2],c[1]);ctx.lineTo(c[0],c[1]);ctx.lineTo(c[0],c[1]+cs*c[3]);
+    ctx.stroke();
+  });
+
+  // 中央の縦横点線
+  ctx.strokeStyle='rgba(255,255,255,0.28)';
+  ctx.lineWidth=1;ctx.setLineDash([5,5]);
+  ctx.beginPath();ctx.moveTo(gx+gw/2,gy+6);ctx.lineTo(gx+gw/2,gy+gh-6);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(gx+6,gy+gh/2);ctx.lineTo(gx+gw-6,gy+gh/2);ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ══ 撮影 ══
+function camShoot(){
+  var vid=document.getElementById('camVid');
+  if(!vid.videoWidth)return;
+
+  // フラッシュ
+  var fl=document.getElementById('camFlash');
+  fl.style.opacity='1';
+  setTimeout(function(){fl.style.opacity='0';},120);
+
+  // video全体をキャプチャ
+  var tmp=document.createElement('canvas');
+  tmp.width=vid.videoWidth; tmp.height=vid.videoHeight;
+  tmp.getContext('2d').drawImage(vid,0,0);
+  var dataURL=tmp.toDataURL('image/jpeg',0.95);
+
+  camClose();
+
+  var img=new Image();
+  img.onload=function(){
+    IMG=img;
+    goPage(2);
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        setupCanvas();
+      });
+    });
+  };
+  img.src=dataURL;
+}
+
+// ══ カメラを閉じる ══
+function camClose(){
+  if(camStream){camStream.getTracks().forEach(function(t){t.stop();});camStream=null;}
+  document.getElementById('camScr').classList.add('hidden');
+  document.getElementById('camVid').srcObject=null;
+}
+
+// ══ ギャラリー読み込み ══
+function galLoad(evt){
+  var f=evt.target.files[0];
+  evt.target.value='';
+  if(!f)return;
+  camGuide=null; // ガイドなし→自動検出
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var img=new Image();
+    img.onload=function(){
+      IMG=img;
+      goPage(2);
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){setupCanvas();});
+      });
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(f);
+}
+
+// ══ Step2 canvasセットアップ ══
+function setupCanvas(){
+  var wrap=document.getElementById('cvWrap');
+  var dispW=wrap.clientWidth;
+  if(dispW<10) dispW=window.innerWidth-56;
+
+  SC=dispW/IMG.width;
+  if(IMG.height*SC>620) SC=620/IMG.height;
+  CW=Math.round(IMG.width*SC);
+  CH=Math.round(IMG.height*SC);
+
+  // srcCanvas
+  var sc=document.getElementById('srcC');
+  sc.width=CW; sc.height=CH;
+  sc.style.width='100%'; sc.style.height='auto';
+  var ctx=sc.getContext('2d');
+  ctx.drawImage(IMG,0,0,CW,CH);
+
+  // ovCanvas：srcCanvasの実際の描画サイズに合わせる
+  var rect=sc.getBoundingClientRect();
+  var rW=Math.round(rect.width), rH=Math.round(rect.height);
+  var ov=document.getElementById('ovC');
+  ov.width=CW; ov.height=CH;
+  ov.style.width=rW+'px'; ov.style.height=rH+'px';
+  ov.style.position='absolute'; ov.style.top='0'; ov.style.left='0';
+
+  // コーナー初期化
+  if(camGuide){
+    // カメラのガイド枠から初期コーナーを設定
+    var g=camGuide;
+    var x1=Math.max(0,Math.min(IMG.width,g.x1))*SC;
+    var y1=Math.max(0,Math.min(IMG.height,g.y1))*SC;
+    var x2=Math.max(0,Math.min(IMG.width,g.x2))*SC;
+    var y2=Math.max(0,Math.min(IMG.height,g.y2))*SC;
+    PTS=[{x:x1,y:y1},{x:x2,y:y1},{x:x2,y:y2},{x:x1,y:y2}];
+    camGuide=null;
+  } else {
+    // 自動検出
+    var m=0.10;
+    PTS=[{x:CW*m,y:CH*m},{x:CW*(1-m),y:CH*m},{x:CW*(1-m),y:CH*(1-m)},{x:CW*m,y:CH*(1-m)}];
+    autoDetect(ctx);
+  }
+
+  drawOv();
+  bindDrag();
+}
+
+// ══ 自動検出 ══
+function autoDetect(ctx){
+  var id=ctx.getImageData(0,0,CW,CH).data;
+  var step=3,minX=CW,maxX=0,minY=CH,maxY=0;
+  for(var y=step;y<CH-step;y+=step){
+    for(var x=step;x<CW-step;x+=step){
+      var i=(y*CW+x)*4;
+      var lum=(id[i]*77+id[i+1]*150+id[i+2]*29)>>8;
+      var ri=(y*CW+(x+step))*4,li=(y*CW+(x-step))*4;
+      var bi=((y+step)*CW+x)*4,ti=((y-step)*CW+x)*4;
+      var dh=Math.abs(((id[ri]*77+id[ri+1]*150+id[ri+2]*29)>>8)-((id[li]*77+id[li+1]*150+id[li+2]*29)>>8));
+      var dv=Math.abs(((id[bi]*77+id[bi+1]*150+id[bi+2]*29)>>8)-((id[ti]*77+id[ti+1]*150+id[ti+2]*29)>>8));
+      if((dh>20||dv>20)&&lum>35&&lum<230){
+        if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+      }
+    }
+  }
+  var pad=6;
+  if((maxX-minX)>CW*0.15&&(maxY-minY)>CH*0.15){
+    PTS=[{x:Math.max(pad,minX),y:Math.max(pad,minY)},{x:Math.min(CW-pad,maxX),y:Math.max(pad,minY)},
+         {x:Math.min(CW-pad,maxX),y:Math.min(CH-pad,maxY)},{x:Math.max(pad,minX),y:Math.min(CH-pad,maxY)}];
+  }
+}
+
+// ══ オーバーレイ描画 ══
+function drawOv(){
+  var ov=document.getElementById('ovC');
+  var ctx=ov.getContext('2d');
+  ctx.clearRect(0,0,CW,CH);
+  // 塗り
+  ctx.beginPath();ctx.moveTo(PTS[0].x,PTS[0].y);
+  for(var i=1;i<4;i++)ctx.lineTo(PTS[i].x,PTS[i].y);
+  ctx.closePath();ctx.fillStyle='rgba(37,99,168,0.13)';ctx.fill();
+  // 枠線
+  ctx.beginPath();ctx.moveTo(PTS[0].x,PTS[0].y);
+  for(var i=1;i<4;i++)ctx.lineTo(PTS[i].x,PTS[i].y);
+  ctx.closePath();ctx.strokeStyle='rgba(37,99,168,0.9)';ctx.lineWidth=Math.max(2,CW/180);ctx.stroke();
+  // ハンドル
+  var R=Math.max(16,CW/22);
+  var labels=['左上','右上','右下','左下'];
+  for(var i=0;i<4;i++){
+    var p=PTS[i];
+    ctx.beginPath();ctx.arc(p.x,p.y,R,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,0.92)';ctx.fill();
+    ctx.strokeStyle='#c0392b';ctx.lineWidth=Math.max(2.5,CW/140);ctx.stroke();
+    ctx.beginPath();ctx.arc(p.x,p.y,R*0.38,0,Math.PI*2);
+    ctx.fillStyle='#c0392b';ctx.fill();
+    var fs=Math.max(11,CW/38);
+    ctx.font='bold '+fs+'px sans-serif';ctx.fillStyle='#c0392b';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    var ox=(i===0||i===3)?-(R+fs*1.5):(R+fs*1.5);
+    var oy=(i===0||i===1)?-(R+fs*0.9):(R+fs*0.9);
+    ctx.fillText(labels[i],p.x+ox,p.y+oy);
+  }
+}
+
+// ══ ドラッグ ══
+function bindDrag(){
+  // ovCはpointer-events:noneにしてタッチを素通し
+  var old=document.getElementById('ovC');
+  var nw=old.cloneNode(false);
+  nw.width=old.width;nw.height=old.height;nw.style.cssText=old.style.cssText;
+  nw.style.pointerEvents='none';  // ★タッチ・クリックを受け取らない
+  nw.id='ovC';
+  old.parentNode.replaceChild(nw,old);
+  drawOv();
+
+  // ★ イベントはsrcC（画像canvas）に付ける
+  var el=document.getElementById('srcC');
+  var HIT=Math.max(32,CW/13);  // 指で掴みやすい広めのヒット範囲
+
+  function getPos(e){
+    var ov=document.getElementById('ovC');
+    var r=ov.getBoundingClientRect(),t=e.touches?e.touches[0]:e;
+    return{x:(t.clientX-r.left)*(CW/r.width),y:(t.clientY-r.top)*(CH/r.height)};
+  }
+  function nearest(p){
+    var best=HIT*HIT,idx=-1;
+    for(var i=0;i<4;i++){
+      var d=(PTS[i].x-p.x)*(PTS[i].x-p.x)+(PTS[i].y-p.y)*(PTS[i].y-p.y);
+      if(d<best){best=d;idx=i;}
+    }
+    return idx;
+  }
+
+  el.addEventListener('mousedown',function(e){DRAG=nearest(getPos(e));});
+
+  // ★ touchstart: まず●に当たるか確認してから preventDefault
+  el.addEventListener('touchstart',function(e){
+    var p=getPos(e);
+    DRAG=nearest(p);
+    if(DRAG>=0 && e.cancelable) e.preventDefault(); // ●に当たった時だけスクロール禁止
+  },{passive:false});
+
+  function mv(e){
+    if(DRAG<0) return;  // ●に当たっていない→スクロールを妨げない
+    if(e.cancelable) e.preventDefault();
+    var p=getPos(e);
+    PTS[DRAG]={x:Math.max(0,Math.min(CW,p.x)),y:Math.max(0,Math.min(CH,p.y))};
+    drawOv();
+  }
+  el.addEventListener('mousemove',mv);
+  el.addEventListener('touchmove',mv,{passive:false});
+  el.addEventListener('mouseup',function(){DRAG=-1;});
+  el.addEventListener('touchend',function(){DRAG=-1;});
+}
+
+// ══ 補正 ══
+function doApply(){
+  document.getElementById('proc').classList.add('vis');
+  setTimeout(function(){try{_transform();}catch(e){alert('エラー:'+e.message);}finally{document.getElementById('proc').classList.remove('vis');}},30);
+}
+function _transform(){
+  var sp=PTS.map(function(p){return{x:p.x/SC,y:p.y/SC};});
+  var rk=document.getElementById('ratio').value;
+  var dW=Math.round(Math.max(hypot(sp[0],sp[1]),hypot(sp[3],sp[2])));
+  var dH=Math.round(Math.max(hypot(sp[0],sp[3]),hypot(sp[1],sp[2])));
+  if(rk==='legal')dH=Math.round(dW*356/216);
+  else if(rk==='a4')dH=Math.round(dW*297/210);
+  else if(rk==='letter')dH=Math.round(dW*279/216);
+  var MAX=2480;
+  if(dW>MAX){var s=MAX/dW;dH=Math.round(dH*s);dW=MAX;}
+  if(dH>3508){var s=3508/dH;dW=Math.round(dW*s);dH=Math.round(dH*s);}
+  var dp=[{x:0,y:0},{x:dW,y:0},{x:dW,y:dH},{x:0,y:dH}];
+  var H=computeH(sp,dp);if(!H){alert('変換失敗。角を調整してください。');return;}
+  var Hi=inv3(H);if(!Hi){alert('逆行列失敗。');return;}
+  var tmp=document.createElement('canvas');
+  tmp.width=IMG.width;tmp.height=IMG.height;tmp.getContext('2d').drawImage(IMG,0,0);
+  var px=tmp.getContext('2d').getImageData(0,0,IMG.width,IMG.height).data;
+  var sW=IMG.width,sH=IMG.height;
+  var rc=document.getElementById('resC');rc.width=dW;rc.height=dH;
+  var ctx=rc.getContext('2d');var out=ctx.createImageData(dW,dH);var od=out.data;
+  for(var dy=0;dy<dH;dy++){for(var dx=0;dx<dW;dx++){
+    var m=warp3(Hi,dx,dy),sx=m[0],sy=m[1],x0=sx|0,y0=sy|0,oi=(dy*dW+dx)*4;
+    if(x0<0||y0<0||x0>=sW-1||y0>=sH-1){od[oi]=od[oi+1]=od[oi+2]=255;od[oi+3]=255;continue;}
+    var fx=sx-x0,fy=sy-y0;
+    for(var c=0;c<3;c++){
+      var a=px[(y0*sW+x0)*4+c],b=px[(y0*sW+x0+1)*4+c],cc=px[((y0+1)*sW+x0)*4+c],dd=px[((y0+1)*sW+x0+1)*4+c];
+      od[oi+c]=(a*(1-fx)*(1-fy)+b*fx*(1-fy)+cc*(1-fx)*fy+dd*fx*fy+0.5)|0;
+    }
+    od[oi+3]=255;
+  }}
+  ctx.putImageData(out,0,0);applyFilter(ctx,dW,dH);goPage(3);
+}
+function hypot(a,b){return Math.sqrt((b.x-a.x)*(b.x-a.x)+(b.y-a.y)*(b.y-a.y));}
+function computeH(src,dst){
+  var A=[],bv=[];
+  for(var i=0;i<4;i++){var sx=src[i].x,sy=src[i].y,dx=dst[i].x,dy=dst[i].y;A.push([-sx,-sy,-1,0,0,0,dx*sx,dx*sy]);bv.push(-dx);A.push([0,0,0,-sx,-sy,-1,dy*sx,dy*sy]);bv.push(-dy);}
+  var h=gaussElim(A,bv);if(!h)return null;
+  return[[h[0],h[1],h[2]],[h[3],h[4],h[5]],[h[6],h[7],1]];
+}
+function gaussElim(A,bv){
+  var n=8,M=A.map(function(r,i){return r.concat([bv[i]]);});
+  for(var col=0;col<n;col++){
+    var mx=Math.abs(M[col][col]),pi=col;
+    for(var r=col+1;r<n;r++){if(Math.abs(M[r][col])>mx){mx=Math.abs(M[r][col]);pi=r;}}
+    if(mx<1e-10)return null;var tmp=M[col];M[col]=M[pi];M[pi]=tmp;
+    var div=M[col][col];for(var c=col;c<=n;c++)M[col][c]/=div;
+    for(var r=0;r<n;r++){if(r===col)continue;var f=M[r][col];for(var c=col;c<=n;c++)M[r][c]-=f*M[col][c];}
+  }
+  return M.map(function(r){return r[n];});
+}
+function inv3(m){
+  var a=m[0][0],b=m[0][1],c=m[0][2],d=m[1][0],e=m[1][1],f=m[1][2],g=m[2][0],h=m[2][1],k=m[2][2];
+  var det=a*(e*k-f*h)-b*(d*k-f*g)+c*(d*h-e*g);if(Math.abs(det)<1e-10)return null;
+  var id=1/det;
+  return[[(e*k-f*h)*id,(c*h-b*k)*id,(b*f-c*e)*id],[(f*g-d*k)*id,(a*k-c*g)*id,(c*d-a*f)*id],[(d*h-e*g)*id,(b*g-a*h)*id,(a*e-b*d)*id]];
+}
+function warp3(m,x,y){var w=m[2][0]*x+m[2][1]*y+m[2][2];return[(m[0][0]*x+m[0][1]*y+m[0][2])/w,(m[1][0]*x+m[1][1]*y+m[1][2])/w];}
+
+// ══ フィルター ══
+function applyFilter(ctx,w,h){
+  var mode=document.getElementById('filt').value;
+  var bright=+document.getElementById('bright').value;
+  var cont=+document.getElementById('cont').value;
+  var id=ctx.getImageData(0,0,w,h),d=id.data;
+  var bf=bright/255;
+  var cf=(259*(cont+255))/(255*(259-cont));
+
+  // グレースケール背景薄め・白飛ばし用：明るいピクセルをどれだけ白に近づけるか
+  // gray_lite: 上位30%を白方向に伸ばす
+  // gray_white: 上位50%を白方向に伸ばす
+  var bgThresh = mode==='gray_lite' ? 160 : mode==='gray_white' ? 130 : 255;
+
+  for(var i=0;i<d.length;i+=4){
+    var r=d[i],g=d[i+1],b=d[i+2];
+
+    // グレースケール変換
+    if(mode!=='none'){
+      var gr=(r*77+g*150+b*29)>>8;
+      r=g=b=gr;
+    }
+
+    // 明るさ・コントラスト
+    r=Math.max(0,Math.min(1,cf*(r/255-0.5)+0.5+bf))*255;
+    g=Math.max(0,Math.min(1,cf*(g/255-0.5)+0.5+bf))*255;
+    b=Math.max(0,Math.min(1,cf*(b/255-0.5)+0.5+bf))*255;
+
+    // 背景薄め処理：bgThresh以上のピクセルを白方向に引き上げる
+    if(mode==='gray_lite'||mode==='gray_white'){
+      var v=r;
+      if(v>=bgThresh){
+        // bgThresh〜255 の範囲を 白(255) に向かってリマップ
+        v=bgThresh + (v-bgThresh)*(255-bgThresh)/(255-bgThresh);
+        // さらに強制的に白に近づける
+        v=Math.min(255, bgThresh + (255-bgThresh)*Math.pow((v-bgThresh)/(255-bgThresh),0.35));
+      }
+      r=g=b=Math.max(0,Math.min(255,v));
+    }
+
+    // 白黒
+    if(mode==='bw'){var v2=r>128?255:0;r=g=b=v2;}
+
+    d[i]=r;d[i+1]=g;d[i+2]=b;
+  }
+  ctx.putImageData(id,0,0);
+}
+
+// ══ ダウンロード ══
+function dl(type){
+  var btnId = type==='png' ? 'btnPng' : 'btnJpg';
+  var btn = document.getElementById(btnId);
+  var origHTML = btn.innerHTML;
+
+  function setBtnOK(){
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px"><polyline points="20 6 9 17 4 12"/></svg>保存しました！';
+    btn.style.background = '#2d6a2d';
+    btn.disabled = true;
+    setTimeout(function(){ btn.innerHTML=origHTML; btn.style.background=''; btn.disabled=false; }, 3000);
+  }
+  function setBtnErr(){
+    btn.innerHTML = origHTML;
+    btn.style.background = '';
+    btn.disabled = false;
+  }
+
+  var rc = document.getElementById('resC');
+  var mime = type==='png' ? 'image/png' : 'image/jpeg';
+  var ext  = type==='png' ? 'png' : 'jpg';
+  var ts   = new Date().toISOString().slice(0,19).replace(/[T:]/g,'-');
+  var defaultName = 'scan_' + ts + '.' + ext;
+
+  // ── ファイル名入力ダイアログ ──
+  var inputName = prompt('ファイル名を入力してください（拡張子不要）', 'scan_' + ts);
+  if(inputName === null) return; // キャンセル
+  inputName = inputName.trim() || ('scan_' + ts);
+  // 拡張子を除いた部分だけ使う
+  inputName = inputName.replace(/\.[^.]+$/, '');
+  var fileName = inputName + '.' + ext;
+
+  // ── showSaveFilePicker 対応ブラウザ（PC Chrome等）──
+  if(window.showSaveFilePicker){
+    rc.toBlob(function(blob){
+      window.showSaveFilePicker({
+        suggestedName: fileName,
+        types:[{description: type.toUpperCase()+'ファイル', accept:{[mime]:['.'+ext]}}]
+      }).then(function(fh){
+        return fh.createWritable();
+      }).then(function(w){
+        return w.write(blob).then(function(){ return w.close(); });
+      }).then(function(){
+        setBtnOK();
+      }).catch(function(err){
+        if(err.name !== 'AbortError'){
+          // フォールバック
+          fallbackDl(rc, mime, fileName);
+          setBtnOK();
+        } else {
+          setBtnErr();
+        }
+      });
+    }, mime, 0.93);
+  } else {
+    // ── 通常ダウンロード（Android Chrome / file:// など）──
+    fallbackDl(rc, mime, fileName);
+    setBtnOK();
+  }
+}
+
+function fallbackDl(rc, mime, fileName){
+  rc.toBlob(function(blob){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); document.body.removeChild(a); }, 1000);
+  }, mime, 0.93);
+}
+function doReset(){IMG=null;PTS=[];DRAG=-1;camGuide=null;document.getElementById('fgal').value='';goPage(1);}
+window.addEventListener('resize',function(){if(!document.getElementById('camScr').classList.contains('hidden'))camDraw();});
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
+</script>
+</body>
+</html>
